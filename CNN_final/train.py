@@ -17,7 +17,7 @@ from keras.applications.densenet import DenseNet121
 from keras.applications import  ResNet50
 from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, TensorBoard
 from keras.optimizers import Adam
-from my_generator import DataGenerator
+from generator import DataGenerator
 from ROC_Callback import ROCCallback
 
 
@@ -31,7 +31,7 @@ from ROC_Callback import ROCCallback
 # Select which model to train
 model_name = "DenseNet121" 
 # model_name = "VGG16" 
-# model_name = "res50" 
+# model_name = "Res50" 
 
 
 # Directory Locations for data
@@ -64,7 +64,7 @@ if model_name == "VGG16":
     initial_LR = 0.0001 
     epochs = 10
     batch_size = 32
-if model_name == "res50":
+if model_name == "Res50":
     initial_LR = 0.0001 
     epochs = 3
     batch_size = 32
@@ -102,7 +102,7 @@ if model_name == "VGG16":
     y = Dense(len(disease_name), activation="sigmoid")(y)
     model = Model(inputs=input_tensor, outputs=y)
 
-if model_name == "res50":
+if model_name == "Res50":
     base_model = ResNet50(include_top = False, weights='imagenet')
     y = base_model(input_tensor)
     y = GlobalAveragePooling2D()(y)
@@ -128,7 +128,7 @@ if model_name == "DenseNet121":
 model.compile(optimizer=Adam(lr=initial_LR), loss="binary_crossentropy")
 
 # Call Back Functions
-saveMetrics = TensorBoard(log_dir=os.path.join(results_loc, "TensorBoard"), batch_size=batch_size)
+tensorboard = TensorBoard(log_dir=os.path.join(results_loc, "tf_board"), batch_size=batch_size)
 
 calculate_AUC = ROCCallback(disease_name=disease_name,log_loc = AUC_save_path, validation_data=validation_DataGenerator )
 
@@ -144,5 +144,5 @@ create_checkpoint = ModelCheckpoint(os.path.join(results_loc,save_weights_only=T
 ############################################################################################################
 class_weight=class_weights(train_file_list_path)
 
-model.fit_generator(generator=train_DataGenerator, class_weight=class_weight,workers=1,epochs=epochs, steps_per_epoch=len(train_file_list) // batch_size,validation_data=validation_sequence,validation_steps=len(val_file_list) // batch_size, shuffle=False,callbacks=[checkpoint, reduce_lr, tensorboard, compute_AUC])
+model.fit_generator(generator=train_DataGenerator, class_weight=class_weight,workers=1,epochs=epochs, steps_per_epoch=len(train_file_list) // batch_size,validation_data=validation_sequence,validation_steps=len(val_file_list) // batch_size, shuffle=False,callbacks=[create_checkpoint, reduce_learningRate, tensorboard, calculate_AUC])
 ############################################################################################################
