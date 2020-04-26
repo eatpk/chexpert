@@ -6,7 +6,8 @@ import os
 import cv2
 import requests
 
-# reference: https://stanford.edu/~shervine/blog/keras-how-to-generate-data-on-the-fly
+# reference: A detailed example of how to use data generators with Keras
+# https://stanford.edu/~shervine/blog
 
 class DataGenerator(keras.utils.Sequence):
     'Generates data for Keras'
