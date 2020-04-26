@@ -16,7 +16,6 @@ from keras.applications.densenet import DenseNet121
 from keras.applications import  ResNet50
 from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, TensorBoard
 from keras.optimizers import Adam
-from my_generator import DataGenerator
 
 
 
