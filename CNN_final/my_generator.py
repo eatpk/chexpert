@@ -4,7 +4,7 @@ import keras
 #from keras.preprocessing.image import ImageDataGenerator
 import os
 import cv2
-
+import requests
 # Our generator is built based on the blog in the reference below.
 # reference: https://stanford.edu/~shervine/blog/keras-how-to-generate-data-on-the-fly
 
