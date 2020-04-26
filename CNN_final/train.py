@@ -2,35 +2,28 @@ import pandas as pd
 import numpy as np
 import os
 import sys
-from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, TensorBoard
-from keras.optimizers import Adam
-from keras.applications.vgg16 import VGG16
-from keras.applications.densenet import DenseNet121
-from keras.layers import Input
-from keras.layers.core import Dense
-from keras.models import Model
-from my_generator import DataGenerator
+import keras
+
 from sklearn.metrics import roc_auc_score 
 from keras.callbacks import Callback
 from datetime import datetime
+from keras.layers import Input
+from keras.layers.core import Dense
+from keras.layers import GlobalAveragePooling2D
+from keras.models import Model
+from keras.applications.vgg16 import VGG16
+from keras.applications.densenet import DenseNet121
+from keras.applications import  ResNet50
+from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, TensorBoard
+from keras.optimizers import Adam
+from my_generator import DataGenerator
 
-# 0. Set Hyper Parameters.
-###################################################################################################
-model_name = "DenseNet121" # must be "VGG16" or "DenseNet121"
 
-image_csv_list_loc = "./dataset_list"
-image_file_loc = "https://storage.googleapis.com/bigteam-team6/images/"
-output_loc = "./output/" + model_name
+############################################################################################################
+# EXTRACT TO SEPERATE FILE???? 
 disease_name = ["Atelectasis", "Cardiomegaly", "Effusion", "Infiltration", "Mass", "Nodule", "Pneumonia",
                "Pneumothorax", "Consolidation", "Edema", "Emphysema", "Fibrosis", "Pleural_Thickening", "Hernia"]
 
-epochs = 10
-batch_size = 32
-
-if model_name == "DenseNet121":
-    initial_LR = 0.001
-
-# class_weight are pre_calculated based on the training dataset. Same order as disease_name.
 class_weight = [{0: 0.096035456, 1: 0.903964544}, 
                 {0: 0.019804505, 1: 0.980195495}, 
                 {0: 0.100710339, 1: 0.899289661}, 
@@ -45,50 +38,100 @@ class_weight = [{0: 0.096035456, 1: 0.903964544},
                 {0: 0.014303928, 1: 0.985696072}, 
                 {0: 0.025851497, 1: 0.974148503}, 
                 {0: 0.001675672, 1: 0.998324328}]
-
-os.system("sudo mkdir "+output_loc)# create output folder
-###################################################################################################
+############################################################################################################
 
 
-# 1. Import Data
-###################################################################################################
-# load data split file names.
-train_file_list_path = os.path.join(image_csv_list_loc, "train.csv")
-train_file_list = pd.read_csv(train_file_list_path)
-
-val_file_list_path = os.path.join(image_csv_list_loc, "validation.csv")
-val_file_list = pd.read_csv(val_file_list_path)
-
-# generators
-train_sequence = DataGenerator(image_file_loc = image_file_loc, disease_name = disease_name, labels = train_file_list, batch_size = batch_size,
-                               target_shape = (224, 224), shuffle = True)
-
-validation_sequence = DataGenerator(image_file_loc = image_file_loc, disease_name = disease_name, labels = val_file_list, batch_size = batch_size,
-                               target_shape = (224, 224), shuffle = False)
-
-print("Loading Data Done\n")
-###################################################################################################
 
 
-# 2. Build Model 
-###################################################################################################
+
+
+############################################################################################################
+# Initialization ###########################################################################################
+############################################################################################################
+
+# Select which model to train
+model_name = "DenseNet121" 
+# model_name = "VGG16" 
+# model_name = "res50" 
+
+
+# Directory Locations for data
+GCP_bucket_loc = "https://storage.googleapis.com/bigteam-team6/images/"
+results_loc = "./results/" + model_name
+image_csv_loc = "./dataset_list"
+train_csv_loc = os.path.join(image_csv_loc, "train.csv")
+val_csv_loc = os.path.join(image_csv_loc, "validation.csv")
+AUC_save_path = os.path.join(results_loc, "validation_auc_log.txt") 
+
+#import CSV for Train and Validation Data
+train_csv = pd.read_csv(train_csv_loc)
+val_csv = pd.read_csv(val_csv_loc)
+
+
+# Initialize Model specific vars
+if model_name == "VGG16":
+    initial_LR = 0.0001 
+    epochs = 10
+    batch_size = 32
+if model_name == "res50":
+    initial_LR = 0.0001 
+    epochs = 3
+    batch_size = 32
+if model_name == "DenseNet121":
+    initial_LR = 0.001
+    epochs = 10
+    batch_size = 32
+
+# Create Results Directory
+os.system("sudo mkdir "+ results_loc) 
+############################################################################################################
+
+
+
+############################################################################################################
+# Generate DataSets ########################################################################################
+############################################################################################################
+
+train_DataGenerator = DataGenerator(image_file_loc = GCP_bucket_loc, labels = train_csv, batch_size = batch_size, disease_name = disease_name, shuffle = True, target_shape = (224, 224))
+validation_DataGenerator = DataGenerator(image_file_loc = GCP_bucket_loc, labels = val_csv, batch_size = batch_size, disease_name = disease_name, shuffle = False, target_shape = (224, 224))
+############################################################################################################
+
+
+
+
+############################################################################################################
+# Build model ##############################################################################################
+############################################################################################################
+
 input_tensor = Input(shape=(224, 224, 3))
 
+if model_name == "VGG16":
+    base_model = VGG16(include_top=False, weights="imagenet", pooling="avg")
+    y = base_model(input_tensor)
+    y = Dense(len(disease_name), activation="sigmoid")(y)
+    model = Model(inputs=input_tensor, outputs=y)
+
+if model_name == "res50":
+    base_model = ResNet50(include_top = False, weights='imagenet')
+    y = base_model(input_tensor)
+    y = GlobalAveragePooling2D()(y)
+    y = Dense(256, activation='relu')(y)
+    y = Dense(len(disease_name), activation='sigmoid')(y)
+    model = Model(inputs=input_tensor, outputs=y)
 
 if model_name == "DenseNet121":
     base_model = DenseNet121(include_top=False, weights="imagenet", pooling="avg") 
+    y = base_model(input_tensor)
+    y = Dense(len(disease_name), activation="sigmoid")(y)
+    model = Model(inputs=input_tensor, outputs=y)
 
-x = base_model(input_tensor)
-predictions = Dense(len(disease_name), activation="sigmoid")(x)
-model = Model(inputs=input_tensor, outputs=predictions)
-
-print(model.summary())
-print("Building Model Done\n")
-###################################################################################################
+############################################################################################################
 
 
-# 3. Callbacks
-###################################################################################################
+
+############################################################################################################
+# callbacks  ###############################################################################################
+############################################################################################################
 # Reference: https://stackoverflow.com/questions/41032551/how-to-compute-receiving-operating-characteristic-roc-and-auc-in-keras
 
 class roc_callback(Callback):
@@ -116,36 +159,21 @@ class roc_callback(Callback):
 
 model.compile(optimizer=Adam(lr=initial_LR), loss="binary_crossentropy")
 
-AUC_save_path = os.path.join(output_loc, "validation_auc_log.txt") # used to select the best model by AUC.
-
-compute_AUC = roc_callback(validation_data=validation_sequence, 
-                           disease_name=disease_name,
-                           log_loc = AUC_save_path)
-
-checkpoint = ModelCheckpoint(os.path.join(output_loc, "weights.{epoch:02d}-{val_loss:.2f}.h5"),
-                             save_weights_only=True,
-                             monitor='val_loss')
-
-reduce_lr = ReduceLROnPlateau(monitor='val_loss', 
-                              factor=0.2, 
-                              patience=1, # use patience = 1, otherwise, training costs too much time.
-                              mode="min", 
-                              min_lr=1e-8)        
-
-tensorboard = TensorBoard(log_dir=os.path.join(output_loc, "TensorBoard"), 
-                          batch_size=batch_size)
-###################################################################################################
 
 
-# 4. Training
-###################################################################################################
-model.fit_generator(generator=train_sequence,
-                              steps_per_epoch=len(train_file_list) // batch_size,
-                              epochs=epochs,
-                              validation_data=validation_sequence,
-                              validation_steps=len(val_file_list) // batch_size,
-                              callbacks=[checkpoint, reduce_lr, tensorboard, compute_AUC],
-                              class_weight=class_weight,
-                              workers=1, 
-                              shuffle=False)
-###################################################################################################
+compute_AUC = roc_callback(validation_data=validation_DataGenerator, disease_name=disease_name,log_loc = AUC_save_path)
+
+checkpoint = ModelCheckpoint(os.path.join(results_loc, "weights.{epoch:02d}-{val_loss:.2f}.h5"),save_weights_only=True,monitor='val_loss')
+
+reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=1, mode="min", min_lr=1e-8)        
+
+tensorboard = TensorBoard(log_dir=os.path.join(results_loc, "TensorBoard"), batch_size=batch_size)
+############################################################################################################
+
+
+
+############################################################################################################
+# Train Model ##############################################################################################
+############################################################################################################
+model.fit_generator(generator=train_DataGenerator, class_weight=class_weight,workers=1,epochs=epochs, steps_per_epoch=len(train_file_list) // batch_size,validation_data=validation_sequence,validation_steps=len(val_file_list) // batch_size, shuffle=False,callbacks=[checkpoint, reduce_lr, tensorboard, compute_AUC])
+############################################################################################################
