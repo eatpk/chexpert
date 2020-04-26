@@ -3,6 +3,7 @@ import numpy as np
 import os
 import sys
 import keras
+import pyspark
 
 from sklearn.metrics import roc_auc_score 
 from keras.callbacks import Callback
@@ -18,28 +19,6 @@ from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, TensorBoard
 from keras.optimizers import Adam
 from my_generator import DataGenerator
 from ROC_Callback import ROCCallback
-
-
-############################################################################################################
-# EXTRACT TO SEPERATE FILE???? 
-
-
-class_weight = [{0: 0.096035456, 1: 0.903964544}, 
-                {0: 0.019804505, 1: 0.980195495}, 
-                {0: 0.100710339, 1: 0.899289661}, 
-                {0: 0.159832433, 1: 0.840167567}, 
-                {0: 0.046214559, 1: 0.953785441}, 
-                {0: 0.054629349, 1: 0.945370651}, 
-                {0: 0.010078319, 1: 0.989921681}, 
-                {0: 0.030502095, 1: 0.969497905}, 
-                {0: 0.033161314, 1: 0.966838686}, 
-                {0: 0.016076741, 1: 0.983923259}, 
-                {0: 0.016501730, 1: 0.983498270}, 
-                {0: 0.014303928, 1: 0.985696072}, 
-                {0: 0.025851497, 1: 0.974148503}, 
-                {0: 0.001675672, 1: 0.998324328}]
-############################################################################################################
-
 
 
 
@@ -71,7 +50,15 @@ val_csv = pd.read_csv(val_csv_loc)
 disease_name = ["Atelectasis", "Cardiomegaly", "Effusion", "Infiltration", "Mass", "Nodule", "Pneumonia",
                "Pneumothorax", "Consolidation", "Edema", "Emphysema", "Fibrosis", "Pleural_Thickening", "Hernia"]
 
+def class_weights(path):
+    
+    sc=pyspark.SparkContext()
+    rdd = sc.textFile(path).map(lambda line: line.split(","))
+    disease_counts=rdd.map(lambda x : [1 if x[i]=='1' else 0 for i in range(3,17)]).reduce(lambda x,y: [sum(i) for i in zip(x,y)])
 
+    return [{0:elm/rdd.count(),1:1-elm/rdd.count()} for elm in disease_counts]
+
+    
 # Initialize Model specific vars
 if model_name == "VGG16":
     initial_LR = 0.0001 
@@ -155,5 +142,7 @@ create_checkpoint = ModelCheckpoint(os.path.join(results_loc,save_weights_only=T
 ############################################################################################################
 # Train Model ##############################################################################################
 ############################################################################################################
-model.fit_generator(generator=train_DataGenerator, class_weight=class_weight,workers=1,epochs=epochs, steps_per_epoch=len(train_file_list) // batch_size,validation_data=validation_sequence,validation_steps=len(val_file_list) // batch_size, shuffle=False,callbacks=[create_checkpoint, reduce_learningRate, saveMetrics, calculate_AUC])
+class_weight=class_weights(train_file_list_path)
+
+model.fit_generator(generator=train_DataGenerator, class_weight=class_weight,workers=1,epochs=epochs, steps_per_epoch=len(train_file_list) // batch_size,validation_data=validation_sequence,validation_steps=len(val_file_list) // batch_size, shuffle=False,callbacks=[checkpoint, reduce_lr, tensorboard, compute_AUC])
 ############################################################################################################

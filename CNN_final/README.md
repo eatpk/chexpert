@@ -16,6 +16,7 @@ sklearn==0.20.1
 opencv==3.4.3
 numpy==1.15.4
 tensorflow==1.15.0
+pyspark==2.4.5
 ```
 
 ### Code
