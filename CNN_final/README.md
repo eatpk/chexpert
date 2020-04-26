@@ -16,6 +16,7 @@ keras==2.2.4
 sklearn==0.20.1
 opencv==3.4.3
 tensorflow==1.15.0
+pyspark==2.4.5
 ```
 
 ### Training
