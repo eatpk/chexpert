@@ -17,12 +17,12 @@ from keras.applications import  ResNet50
 from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, TensorBoard
 from keras.optimizers import Adam
 from my_generator import DataGenerator
+from ROC_Callback import ROCCallback
 
 
 ############################################################################################################
 # EXTRACT TO SEPERATE FILE???? 
-disease_name = ["Atelectasis", "Cardiomegaly", "Effusion", "Infiltration", "Mass", "Nodule", "Pneumonia",
-               "Pneumothorax", "Consolidation", "Edema", "Emphysema", "Fibrosis", "Pleural_Thickening", "Hernia"]
+
 
 class_weight = [{0: 0.096035456, 1: 0.903964544}, 
                 {0: 0.019804505, 1: 0.980195495}, 
@@ -66,6 +66,10 @@ AUC_save_path = os.path.join(results_loc, "validation_auc_log.txt")
 #import CSV for Train and Validation Data
 train_csv = pd.read_csv(train_csv_loc)
 val_csv = pd.read_csv(val_csv_loc)
+
+#diseases tracked
+disease_name = ["Atelectasis", "Cardiomegaly", "Effusion", "Infiltration", "Mass", "Nodule", "Pneumonia",
+               "Pneumothorax", "Consolidation", "Edema", "Emphysema", "Fibrosis", "Pleural_Thickening", "Hernia"]
 
 
 # Initialize Model specific vars
@@ -124,50 +128,26 @@ if model_name == "DenseNet121":
     y = base_model(input_tensor)
     y = Dense(len(disease_name), activation="sigmoid")(y)
     model = Model(inputs=input_tensor, outputs=y)
-
 ############################################################################################################
 
 
 
+
+
 ############################################################################################################
-# callbacks  ###############################################################################################
+# End of Training functions ################################################################################
 ############################################################################################################
-# Reference: https://stackoverflow.com/questions/41032551/how-to-compute-receiving-operating-characteristic-roc-and-auc-in-keras
-
-class roc_callback(Callback):
-    def __init__(self, validation_data, disease_name, log_loc):
-        self.validation_data = validation_data
-        self.x_val = validation_data[0]
-        self.y_val = validation_data[1]
-        self.disease_name = disease_name
-        self.log_loc = log_loc
-
-    def on_epoch_end(self, epoch, logs={}):
-        y_pred = self.model.predict_generator(self.validation_data)
-        y_true = self.validation_data.getTrueLabel()
-
-        aucList = []
-        for i in range(len(self.disease_name)):
-            one_auc = roc_auc_score(y_true[:, i], y_pred[:, i])
-            aucList.append(one_auc)
-        
-        print("Mean AUC: {}\n".format(np.mean(aucList)))
-        f = open(self.log_loc, "a+")
-        f.write("Epoch {}: {}\n".format(epoch+1, np.mean(aucList))) # epoch starts from 0, add 1 to keep consistency.
-        f.close()
-        return
 
 model.compile(optimizer=Adam(lr=initial_LR), loss="binary_crossentropy")
 
+# Call Back Functions
+saveMetrics = TensorBoard(log_dir=os.path.join(results_loc, "TensorBoard"), batch_size=batch_size)
 
+calculate_AUC = ROCCallback(disease_name=disease_name,log_loc = AUC_save_path, validation_data=validation_DataGenerator )
 
-compute_AUC = roc_callback(validation_data=validation_DataGenerator, disease_name=disease_name,log_loc = AUC_save_path)
+reduce_learningRate = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=1, mode="min", min_lr=1e-8) 
 
-checkpoint = ModelCheckpoint(os.path.join(results_loc, "weights.{epoch:02d}-{val_loss:.2f}.h5"),save_weights_only=True,monitor='val_loss')
-
-reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=1, mode="min", min_lr=1e-8)        
-
-tensorboard = TensorBoard(log_dir=os.path.join(results_loc, "TensorBoard"), batch_size=batch_size)
+create_checkpoint = ModelCheckpoint(os.path.join(results_loc,save_weights_only=True,monitor='val_loss', "weights.{epoch:02d}-{val_loss:.2f}.h5"))
 ############################################################################################################
 
 
@@ -175,5 +155,5 @@ tensorboard = TensorBoard(log_dir=os.path.join(results_loc, "TensorBoard"), batc
 ############################################################################################################
 # Train Model ##############################################################################################
 ############################################################################################################
-model.fit_generator(generator=train_DataGenerator, class_weight=class_weight,workers=1,epochs=epochs, steps_per_epoch=len(train_file_list) // batch_size,validation_data=validation_sequence,validation_steps=len(val_file_list) // batch_size, shuffle=False,callbacks=[checkpoint, reduce_lr, tensorboard, compute_AUC])
+model.fit_generator(generator=train_DataGenerator, class_weight=class_weight,workers=1,epochs=epochs, steps_per_epoch=len(train_file_list) // batch_size,validation_data=validation_sequence,validation_steps=len(val_file_list) // batch_size, shuffle=False,callbacks=[create_checkpoint, reduce_learningRate, saveMetrics, calculate_AUC])
 ############################################################################################################
