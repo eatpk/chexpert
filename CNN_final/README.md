@@ -21,15 +21,20 @@ pyspark==2.4.5
 
 ### Code
 
-Train.py = Main file that creates, configures, and trains the NN models
+train.py = Main file that creates, configures, and trains the NN models
+
 ROC_Callback.py = File that prcoesses the overall accuracy for the model
+
 Preprocess.py = File used to parse through the images for preprocessing
-my_generator.py = File used to create the dataset for the NN models
+
+generator.py = File used to create the dataset for the NN models
+
+/dataset_list/ = the .csv containing image paths to train/validation/testing set and labels for each disease.
 
 
 ### Execute code
 
-1. Configure the environment and code in Train.py
+1. Configure the environment and code in train.py
 2. run the code via 
 ```
 python train.py
